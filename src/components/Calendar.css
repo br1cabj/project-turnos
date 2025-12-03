@@ -1,0 +1,103 @@
+.rbc-calendar {
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: #4b5563;
+  background-color: white;
+  border-radius: 12px;
+}
+
+.rbc-header {
+  padding: 12px 0;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  color: #6b7280;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.rbc-header + .rbc-header {
+  border-left: 1px solid #f3f4f6 !important;
+}
+
+/* Cuadricula de horas */
+.rbc-time-view {
+  border: none !important;
+}
+
+.rbc-day-slot .rbc-time-slot {
+  border-top: 1px solid #f3f4f6 !important;
+}
+
+/* EL EVENTO  */
+.rbc-event {
+  background-color: transparent !important;
+  padding: 0 !important; /* <--- ESTO ES CRUCIAL */
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+.rbc-event-content {
+  height: 100% !important;
+  width: 100% !important;
+  display: block !important;
+}
+
+.custom-event-box {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  height: 100%;
+  width: 100%;
+
+  border-radius: 4px;
+  padding: 2px 6px;
+
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-left-width: 4px;
+  border-left-style: solid;
+
+  font-size: 0.8rem;
+  line-height: 1.2;
+  overflow: hidden;
+  transition: transform 0.1s ease;
+}
+
+.custom-event-box:hover {
+  transform: scale(1.05);
+  z-index: 50;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.rbc-event-label {
+  display: none !important;
+}
+
+.rbc-toolbar button {
+  border: 1px solid #e5e7eb !important;
+  color: #374151 !important;
+  border-radius: 6px !important;
+  padding: 6px 12px !important;
+  font-weight: 500 !important;
+  font-size: 0.9rem !important;
+  margin-left: 5px;
+}
+
+.rbc-toolbar button.rbc-active {
+  background-color: #0d6efd !important;
+  color: white !important;
+  border-color: #0d6efd !important;
+  box-shadow: 0 2px 4px rgba(13, 110, 253, 0.3);
+}
+
+.rbc-toolbar button:hover {
+  background-color: #f9fafb !important;
+}
+
+/* Hora actual  */
+.rbc-current-time-indicator {
+  background-color: #dc3545 !important;
+  height: 2px !important;
+}
