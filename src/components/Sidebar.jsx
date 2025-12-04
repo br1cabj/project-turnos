@@ -8,35 +8,44 @@ import {
   GearFill,
   BoxArrowLeft
 } from "react-bootstrap-icons";
+import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from "../contexts/AuthContext";
-import { onBackgroundMessage } from "firebase/messaging/sw";
 
 export default function Sidebar() {
   const location = useLocation();
-  const { logout } = useAuth()
+  const { logout } = useAuth();
+  const { theme } = useTheme()
 
   const isActive = (path) => location.pathname === path;
 
-  const navLinkStyle = (path) => ({
-    color: isActive(path) ? "#fff" : "#B5BEC7",
-    onBackgroundColor: isActive(path) ? "#FFF" : "transparent",
-    borderRadius: "8px",
-    padding: "10px 15px",
-    marginBottom: "5px",
-    display: "flex",
-    alignItems: "center",
-    textDecoration: "none",
-    fontWeight: isActive(path) ? "600" : "400",
-    transition: "all 0.3s ease"
-  });
+  const navLinkStyle = (path) => {
+    const active = isActive(path);
+    return {
+      backgroundColor: active ? theme.activeItem : "transparent",
+      color: active
+        ? (theme.activeText || '#fff')
+        : theme.sidebarText,
+      opacity: active ? 1 : 0.8,
+      borderRadius: "8px",
+      padding: "10px 15px",
+      marginBottom: "5px",
+      display: "flex",
+      alignItems: "center",
+      textDecoration: "none",
+      fontWeight: active ? "600" : "400",
+      transition: "all 0.2s ease"
+    };
+  };
 
   return (
-    <div className="d-flex flex-column p-3 text-white bg-dark" style={{ height: "100vh", width: "250px" }}>
-      <div className="d-flex align-items-center mb-3 mb-md-0 me-md-auto text-white text-decoration-none px-2">
-        <span className="fs-4 fw-bold">CloudTurn</span>
+
+    <div className="d-flex flex-column p-3" style={{ height: "100%", width: "100%", minWidth: "250px", backgroundColor: theme.sidebarBg, color: theme.sidebarText }}>
+
+      <div className="d-flex align-items-center mb-3 mb-md-0 me-md-auto text-decoration-none px-2">
+        <span className="fs-4 fw-bold" style={{ color: theme.sidebarText }}>CloudTurn</span>
       </div>
 
-      <hr />
+      <hr style={{ borderColor: theme.sidebarText, opacity: 0.2 }} />
 
       {/* NAVBAR */}
       <Nav className="flex-column mb-auto">
@@ -61,14 +70,11 @@ export default function Sidebar() {
         </Link>
       </Nav>
 
-      <hr />
+      <hr style={{ borderColor: theme.sidebarText, opacity: 0.2 }} />
 
       {/* USUARIO Y LOGOUT */}
       <div className="mt-auto">
-        <div
-          onClick={logout}
-          style={{ ...navLinkStyle("#"), cursor: "pointer", color: "#ff6b6b" }}
-        >
+        <div onClick={logout} style={{ ...navLinkStyle("#"), cursor: "pointer", color: "#ff6b6b" }}>
           <BoxArrowLeft className="me-2" size={20} />
           Cerrar Sesión
         </div>

@@ -14,6 +14,7 @@ import PublicBooking from './pages/PublicBooking';
 import SuperAdmin from './pages/SuperAdmin';
 import SubscriptionGuard from './components/SubscriptionGuard';
 import RateService from './pages/RateService';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 
 
@@ -33,44 +34,47 @@ function App() {
 
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          {/* Ruta Protegida */}
-          <Route path="/" element={
-            <PrivateRoute>
-              <SubscriptionGuard>
-                <Dashboard />
-              </SubscriptionGuard>
-            </PrivateRoute>
-          } />
-          <Route path="/configuracion" element={
-            <PrivateRoute>
-              <Configuration />
-            </PrivateRoute>
-          } />
-          <Route path="/clientes" element={
-            <PrivateRoute><Clients /></PrivateRoute>
-          } />
-          <Route path="/caja" element={
-            <PrivateRoute><CashRegister /></PrivateRoute>
-          } />
-          <Route path="/super-admin" element={
-            <PrivateRoute>
-              <SuperAdminRoute>
-                <SuperAdmin />
-              </SuperAdminRoute>
-            </PrivateRoute>
-          } />
+        <ThemeProvider>
+          <Routes>
+
+            {/* Ruta Protegida */}
+            <Route path="/" element={
+              <PrivateRoute>
+                <SubscriptionGuard>
+                  <Dashboard />
+                </SubscriptionGuard>
+              </PrivateRoute>
+            } />
+            <Route path="/configuracion" element={
+              <PrivateRoute>
+                <Configuration />
+              </PrivateRoute>
+            } />
+            <Route path="/clientes" element={
+              <PrivateRoute><Clients /></PrivateRoute>
+            } />
+            <Route path="/caja" element={
+              <PrivateRoute><CashRegister /></PrivateRoute>
+            } />
+            <Route path="/super-admin" element={
+              <PrivateRoute>
+                <SuperAdminRoute>
+                  <SuperAdmin />
+                </SuperAdminRoute>
+              </PrivateRoute>
+            } />
 
 
-          {/* Rutas Públicas */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reservar/:slug" element={<PublicBooking />} />
-          <Route path="/calificar/:apptId" element={<RateService />} />
+            {/* Rutas Públicas */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reservar/:slug" element={<PublicBooking />} />
+            <Route path="/calificar/:apptId" element={<RateService />} />
 
-        </Routes>
+          </Routes>
+        </ThemeProvider>
       </AuthProvider>
-    </BrowserRouter>
+    </BrowserRouter >
   );
 }
 

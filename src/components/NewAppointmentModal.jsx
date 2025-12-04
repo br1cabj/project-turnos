@@ -3,8 +3,10 @@ import { Modal, Button, Form, Row, Col } from "react-bootstrap";
 import { getCollection, createAppointment, createRecurringAppointments } from "../services/dbService";
 import Swal from 'sweetalert2';
 import { useSector } from "../hooks/useSector";
+import { saveDocument } from "../services/dbService";
 
-// Generador de horarios cada 30 minutos (00:00 a 23:30)
+
+// Generador de horarios cada 30 minutos
 const TIME_SLOTS = [];
 for (let i = 0; i < 24; i++) {
   const hour = i.toString().padStart(2, '0');
@@ -24,7 +26,7 @@ const getFriendlyDate = (dateString) => {
   });
 };
 
-export default function NewAppointmentModal({ show, handleClose, tenantId, tenant, onSaved }) {
+export default function NewAppointmentModal({ show, handleClose, tenantId, tenant, onSaved, initialData }) {
   const [loading, setLoading] = useState(false);
   const [services, setServices] = useState([]);
   const [resources, setResources] = useState([]);
@@ -45,6 +47,50 @@ export default function NewAppointmentModal({ show, handleClose, tenantId, tenan
 
   const [isRecurring, setIsRecurring] = useState(false);
   const [weeksToRepeat, setWeeksToRepeat] = useState(4);
+
+  useEffect(() => {
+    // Si el modal se muestra y hay datos iniciales (click en el calendario)
+    if (show && initialData) {
+      const startDate = initialData.start; // Objeto Date
+
+      // 1. Extraer Fecha (YYYY-MM-DD)
+      const year = startDate.getFullYear();
+      const month = String(startDate.getMonth() + 1).padStart(2, '0');
+      const day = String(startDate.getDate()).padStart(2, '0');
+      const newDateVal = `${year}-${month}-${day}`;
+
+      // 2. Extraer Hora (HH:MM)
+      const hours = String(startDate.getHours()).padStart(2, '0');
+      const minutes = String(startDate.getMinutes()).padStart(2, '0');
+      const newTimeVal = `${hours}:${minutes}`;
+
+      // Actualizamos estado (Las validaciones if siguen siendo útiles por seguridad)
+      if (date !== newDateVal) {
+        setDate(newDateVal);
+      }
+
+      if (time !== newTimeVal) {
+        setTime(newTimeVal);
+      }
+
+      if (initialData.resourceId && selectedResource !== initialData.resourceId) {
+        setSelectedResource(initialData.resourceId);
+      }
+
+    } else if (show && !initialData) {
+      // Si abren el modal con el botón "Nuevo" (Reseteo manual)
+      const today = new Date().toISOString().split('T')[0];
+
+      if (date !== today) setDate(today);
+      if (time !== "10:00") setTime("10:00");
+      if (selectedResource !== "") setSelectedResource("");
+    }
+
+    // --- CAMBIO CLAVE AQUÍ ABAJO ---
+    // Quitamos 'date', 'time' y 'selectedResource' de aquí.
+    // Solo escuchamos cambios en 'show' y 'initialData'.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show, initialData]);
 
   // Cargar las listas
   useEffect(() => {
@@ -144,10 +190,22 @@ export default function NewAppointmentModal({ show, handleClose, tenantId, tenan
 
       // --- LÓGICA DE GUARDADO ---
 
-      // 1. Guardar el turno principal (El de hoy) SIEMPRE
-      await createAppointment(newTurno);
+      // 1. Guardar el turno principal
+      const docRef = await createAppointment(newTurno);
 
-      // 2. Si es recurrente, crear los clones futuros
+      if (depositAmount > 0) {
+        await saveDocument("movements", {
+          tenantId,
+          description: `Seña Turno: ${serviceObj.name} - ${clientName}`,
+          amount: depositAmount,
+          type: "income",
+          date: new Date().toISOString().split('T')[0],
+          createdAt: new Date(),
+          appointmentId: docRef.id
+        });
+      }
+
+      // 2. Si es recurrente,
       if (isRecurring && sector.features?.recurring) {
         const { created } = await createRecurringAppointments(newTurno, weeksToRepeat);
 
@@ -157,7 +215,7 @@ export default function NewAppointmentModal({ show, handleClose, tenantId, tenan
           text: `Se creó el turno de hoy + ${created.length} repeticiones futuras.`
         });
       } else {
-        // Mensaje simple
+
         Swal.fire({
           position: 'center',
           icon: 'success',
@@ -171,7 +229,7 @@ export default function NewAppointmentModal({ show, handleClose, tenantId, tenan
       handleClose();
       if (onSaved) onSaved();
 
-      // Resetear campos volátiles
+
       setClientName('');
       setVehiclePlate('');
       setVehicleModel('');
@@ -195,23 +253,26 @@ export default function NewAppointmentModal({ show, handleClose, tenantId, tenan
 
   return (
     <Modal show={show} onHide={handleClose} centered>
-      <Modal.Header closeButton>
-        <Modal.Title className="fw-bold">📅 Nuevo Turno</Modal.Title>
+      <Modal.Header closeButton className="bg-primary text-white">
+        <Modal.Title className="fw-bold fs-5">
+          {initialData ? "⚡ Agendar Turno Rápido" : "📅 Nuevo Turno"}
+        </Modal.Title>
       </Modal.Header>
-      <Modal.Body>
+      <Modal.Body className="p-4">
         <Form onSubmit={handleSubmit}>
 
           <Form.Group className="mb-3">
-            <Form.Label>Nombre del Cliente</Form.Label>
+            <Form.Label className="fw-bold">Nombre del Cliente</Form.Label>
             <Form.Control
               type="text"
-              placeholder="Escribe para buscar..."
+              placeholder="🔍 Escribe para buscar..."
               value={clientName}
               onChange={e => setClientName(e.target.value)}
               required
               autoFocus
               list="client-options"
               autoComplete="off"
+              className="form-control-lg"
             />
             <datalist id="client-options">
               {clients.map(c => (
@@ -229,14 +290,14 @@ export default function NewAppointmentModal({ show, handleClose, tenantId, tenan
 
           {/* MÓDULO PAGOS PARCIALES */}
           {sector.features?.partialPayment && selectedService && (
-            <Row className="mb-3">
+            <Row className="mb-3 animate-fade-in">
               <Col md={6}>
                 <Form.Group>
                   <Form.Label>Precio Total</Form.Label>
                   <Form.Control
                     value={`$${services.find(s => s.id === selectedService)?.price}`}
                     disabled
-                    className="bg-light fw-bold"
+                    className="bg-light fw-bold text-dark"
                   />
                 </Form.Group>
               </Col>
@@ -249,10 +310,11 @@ export default function NewAppointmentModal({ show, handleClose, tenantId, tenan
                     value={deposit}
                     onChange={e => setDeposit(e.target.value)}
                     max={services.find(s => s.id === selectedService)?.price}
+                    className="border-primary"
                   />
                   {deposit > 0 && (
-                    <Form.Text className="text-danger fw-bold">
-                      Restan pagar: ${services.find(s => s.id === selectedService)?.price - deposit}
+                    <Form.Text className="text-danger fw-bold small">
+                      Restan: ${services.find(s => s.id === selectedService)?.price - deposit}
                     </Form.Text>
                   )}
                 </Form.Group>
@@ -263,23 +325,25 @@ export default function NewAppointmentModal({ show, handleClose, tenantId, tenan
           {/* MÓDULO AUTOMOTRIZ */}
           {sector.features?.vehicleInfo && (
             <div className="p-3 bg-light rounded mb-3 border">
-              <h6 className="text-muted mb-2" style={{ fontSize: '0.8rem' }}>DATOS DEL VEHÍCULO</h6>
+              <h6 className="text-muted mb-2 fw-bold" style={{ fontSize: '0.75rem' }}>DATOS DEL VEHÍCULO</h6>
               <Row>
                 <Col md={6}>
                   <Form.Group>
                     <Form.Control
-                      placeholder="Patente / Placa (Ej: AA123BB)"
+                      placeholder="Patente (Ej: AA123BB)"
                       value={vehiclePlate}
                       onChange={e => setVehiclePlate(e.target.value.toUpperCase())}
+                      size="sm"
                     />
                   </Form.Group>
                 </Col>
                 <Col md={6}>
                   <Form.Group>
                     <Form.Control
-                      placeholder="Modelo (Ej: Toyota Corolla)"
+                      placeholder="Modelo (Ej: Toyota)"
                       value={vehicleModel}
                       onChange={e => setVehicleModel(e.target.value)}
+                      size="sm"
                     />
                   </Form.Group>
                 </Col>
@@ -290,11 +354,12 @@ export default function NewAppointmentModal({ show, handleClose, tenantId, tenan
           <Row>
             <Col md={6}>
               <Form.Group className="mb-3">
-                <Form.Label>Servicio</Form.Label>
+                <Form.Label className="fw-bold">Servicio</Form.Label>
                 <Form.Select
                   value={selectedService}
                   onChange={e => setSelectedService(e.target.value)}
                   required
+                  className="form-select-lg"
                 >
                   <option value="">Seleccionar...</option>
                   {services.map(s => (
@@ -307,7 +372,7 @@ export default function NewAppointmentModal({ show, handleClose, tenantId, tenan
             </Col>
             <Col md={6}>
               <Form.Group className="mb-3">
-                <Form.Label>{sector.resourceLabel}</Form.Label>
+                <Form.Label className="fw-bold">{sector.resourceLabel}</Form.Label>
                 <Form.Select
                   value={selectedResource}
                   onChange={e => setSelectedResource(e.target.value)}
@@ -325,16 +390,19 @@ export default function NewAppointmentModal({ show, handleClose, tenantId, tenan
             <Col md={6}>
               <Form.Group className="mb-3">
                 <Form.Label>Fecha del Turno</Form.Label>
-                {/* BOTONES RÁPIDOS */}
-                <div className="d-flex gap-2 mb-2">
-                  <Button variant="outline-secondary" size="sm" onClick={setToday} className="w-50">
-                    Hoy
-                  </Button>
-                  <Button variant="outline-secondary" size="sm" onClick={setTomorrow} className="w-50">
-                    Mañana
-                  </Button>
-                </div>
-                {/* SELECTOR */}
+
+
+                {!initialData && (
+                  <div className="d-flex gap-2 mb-2">
+                    <Button variant="outline-secondary" size="sm" onClick={setToday} className="w-50">
+                      Hoy
+                    </Button>
+                    <Button variant="outline-secondary" size="sm" onClick={setTomorrow} className="w-50">
+                      Mañana
+                    </Button>
+                  </div>
+                )}
+
                 <div className="input-group">
                   <Form.Control
                     type="date"
@@ -359,6 +427,10 @@ export default function NewAppointmentModal({ show, handleClose, tenantId, tenan
                   required
                   className="fw-bold"
                 >
+                  {/* Si la hora no está en la lista, la agregamos dinámicamente */}
+                  {!TIME_SLOTS.includes(time) && (
+                    <option value={time}>{time} hs</option>
+                  )}
                   {TIME_SLOTS.map(t => (
                     <option key={t} value={t}>
                       {t} hs
@@ -399,7 +471,7 @@ export default function NewAppointmentModal({ show, handleClose, tenantId, tenan
           )}
 
           <div className="d-grid mt-4">
-            <Button variant="primary" type="submit" disabled={loading} size="lg">
+            <Button variant="primary" type="submit" disabled={loading} size="lg" className="shadow-sm">
               {loading ? "Guardando..." : "Confirmar Reserva"}
             </Button>
           </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PublicLayout from '../layouts/PublicLayout';
 import { Card, Button, Spinner, Form, Row, Col, Alert } from 'react-bootstrap';
-import { Clock, CashCoin, ChevronRight, Person, CalendarDate, ArrowLeft, CheckCircleFill } from 'react-bootstrap-icons';
+import { Clock, CashCoin, ChevronRight, Person, CalendarDate, ArrowLeft, CheckCircleFill, Whatsapp } from 'react-bootstrap-icons';
 import { getCollection, getTenantBySlug, getAppointmentsByDate, createAppointment } from '../services/dbService';
 import DateSelector from '../components/DateSelector';
 import Swal from 'sweetalert2'
@@ -70,38 +70,63 @@ export default function PublicBooking() {
       setAvailableSlots([]);
       if (!selectedDate) return;
 
-      // --- LÓGICA DE DISPONIBILIDAD ---
-      const dateObj = new Date(selectedDate + 'T00:00:00')
-      const daysOfWeek = dateObj.getDay()
+      // 1. Obtener configuración del día 
+      const dateObj = new Date(selectedDate + 'T00:00:00');
+      const dayIndex = dateObj.getDay();
 
-      const dayConfig = tenant.openingHours ? tenant.openingHours[daysOfWeek] : { isOpen: true, start: "09:00", end: "19:00" };
+      const dayConfig = tenant.openingHours ? tenant.openingHours[dayIndex] : null;
 
+      // Si está cerrado o no existe config, salimos
       if (!dayConfig || !dayConfig.isOpen) {
-        return
+        return;
       }
 
-      // Traer los turnos 
+      // 2. Traer los turnos existentes de la DB
       const existingAppointments = await getAppointmentsByDate(tenant.id, selectedDate);
-
       const duration = selectedService.duration;
 
       let slots = [];
-      let currentTime = new Date(`${selectedDate}T09:00:00`);
-      const endTime = new Date(`${selectedDate}T19:00:00`);
 
-      // Bucle para generar huecos
+      // 3. Configurar hora de inicio y fin
+      const [startHour, startMin] = dayConfig.start.split(':');
+      const [endHour, endMin] = dayConfig.end.split(':');
+
+      let currentTime = new Date(dateObj);
+      currentTime.setHours(parseInt(startHour), parseInt(startMin), 0);
+
+      const endTime = new Date(dateObj);
+      endTime.setHours(parseInt(endHour), parseInt(endMin), 0);
+
+      // 4. Bucle para generar huecos
       while (currentTime < endTime) {
         const slotStart = new Date(currentTime);
         const slotEnd = new Date(currentTime.getTime() + duration * 60000);
 
+
         if (slotEnd > endTime) break;
 
-        // VERIFICAR COLISIÓN
-        const isBusy = existingAppointments.some(appt => {
+        // --- LÓGICA DE COLISIÓN  ---
+        let isBusy = false;
 
-          if (selectedResource && appt.resourceId !== selectedResource.id) return false;
-          return (slotStart < appt.end && slotEnd > appt.start);
-        });
+        if (selectedResource) {
+          // CASO A: El usuario eligió un profesional específico
+          isBusy = existingAppointments.some(appt =>
+            appt.resourceId === selectedResource.id &&
+            (slotStart < appt.end && slotEnd > appt.start)
+          );
+        } else {
+          // CASO B: "Cualquier profesional" (El primero disponible)
+
+          // Filtramos cuántos turnos hay en este horario exacto (superpuestos)
+          const overlappingAppts = existingAppointments.filter(appt =>
+            (slotStart < appt.end && slotEnd > appt.start)
+          );
+
+          // Si hay tantos turnos superpuestos como recursos totales, entonces NO hay lugar
+          if (overlappingAppts.length >= resources.length) {
+            isBusy = true;
+          }
+        }
 
         if (!isBusy) {
           const hours = slotStart.getHours().toString().padStart(2, '0');
@@ -114,10 +139,11 @@ export default function PublicBooking() {
 
       setAvailableSlots(slots);
     };
-    if (step === 3 && selectedDate && selectedService) {
+
+    if (step === 3 && selectedDate && selectedService && tenant) {
       calculateAvailability();
     }
-  }, [selectedDate, selectedResource, step, selectedService, tenant]);
+  }, [selectedDate, selectedResource, step, selectedService, tenant, resources]);
 
 
 
@@ -237,7 +263,7 @@ export default function PublicBooking() {
         </div>
       )}
 
-      {/* PASO 2: SECTOR */}
+      {/* PASO 2: RESOURCE */}
       {step === 2 && (
         <div className="animate-fade-in">
           <h5 className="mb-3 fw-bold text-secondary">2. Selecciona {sector.resourceLabel}</h5>
@@ -251,17 +277,26 @@ export default function PublicBooking() {
             {resources.map(resource => (
               <Card key={resource.id} className="border-0 shadow-sm service-card" onClick={() => handleSelectResource(resource)}>
                 <Card.Body className="d-flex align-items-center">
-                  <div className="bg-primary text-white rounded-circle p-2 me-3" style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {resource.name.charAt(0)}
+                  {/* FOTO O INICIAL */}
+                  <div className="me-3">
+                    {resource.photoUrl ? (
+                      <img src={resource.photoUrl} alt={resource.name} className="rounded-circle shadow-sm" style={{ width: 50, height: 50, objectFit: 'cover' }} />
+                    ) : (
+                      <div className="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center fw-bold" style={{ width: 50, height: 50, fontSize: '1.2rem' }}>
+                        {resource.name.charAt(0)}
+                      </div>
+                    )}
                   </div>
-                  <h6 className="fw-bold mb-0">{resource.name}</h6>
+                  <div>
+                    <h6 className="fw-bold mb-0">{resource.name}</h6>
+                    {resource.description && <div className="text-muted small mt-1">{resource.description}</div>}
+                  </div>
                 </Card.Body>
               </Card>
             ))}
           </div>
         </div>
       )}
-
       {/* PASO 3: FECHA Y HORA */}
       {step === 3 && (
         <div className="animate-fade-in">
@@ -344,7 +379,6 @@ export default function PublicBooking() {
               variant="success"
               size="lg"
               onClick={() => {
-                // Creamos el mensaje
                 const msg = `Hola! Te confirmo mi turno en *${tenant.name}* para el servicio *${selectedService.name}* el día ${selectedDate} a las ${selectedTime}hs. Guardame!`;
                 // Abrimos WhatsApp con el mensaje pre-cargado
                 const url = `https://wa.me/${customerPhone}?text=${encodeURIComponent(msg)}`;

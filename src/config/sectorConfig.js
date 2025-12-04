@@ -9,7 +9,7 @@ export const SECTORS = {
     features: {
       vehicleInfo: false,
       clinicalHistory: false,
-      partialPayment: true,
+      partialPayment: false,
       recurring: true,
     },
   },
@@ -51,7 +51,7 @@ export const SECTORS = {
     features: {
       vehicleInfo: true,
       clinicalHistory: false,
-      partialPayment: false,
+      partialPayment: true,
     },
   },
   generic: {

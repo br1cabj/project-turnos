@@ -169,7 +169,7 @@ export default function AppointmentDetailsModal({ show, handleClose, appointment
               disabled={loading}
             >
               <CashCoin className="me-2" />
-              Cobrar ${appointment.price}
+              Cobrar Restante ${appointment.price - (appointment.deposit || 0)}
             </Button>
           ) : (
             <div className="alert alert-success text-center m-0">

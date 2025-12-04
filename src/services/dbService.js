@@ -20,27 +20,51 @@ import { add } from 'date-fns';
 import { auth } from '../config/firebase';
 
 export const getMyBusiness = async (userId, userEmail = '') => {
-  const qId = query(collection(db, 'tenants'), where('ownerId', '==', userId));
-  const snapshotId = await getDocs(qId);
-  if (!snapshotId.empty) {
-    return { id: snapshotId.docs[0].id, ...snapshotId.docs[0].data() };
+  if (!userId) {
+    console.warn('⚠️ getMyBusiness llamado sin userId');
+    return null;
   }
 
-  if (userEmail) {
-    const qEmail = query(
+  try {
+    const qId = query(
       collection(db, 'tenants'),
-      where('ownerEmail', '==', userEmail)
+      where('ownerId', '==', userId)
     );
-    const snapshotEmail = await getDocs(qEmail);
+    const snapshotId = await getDocs(qId);
 
-    if (!snapshotEmail.empty) {
-      const docRef = snapshotEmail.docs[0].ref;
-      await updateDoc(docRef, { ownerId: userId });
-
-      return { id: snapshotEmail.docs[0].id, ...snapshotEmail.docs[0].data() };
+    if (!snapshotId.empty) {
+      return { id: snapshotId.docs[0].id, ...snapshotId.docs[0].data() };
     }
+
+    // 3. Intento 2: Buscar por Email
+    if (userEmail) {
+      const emailToSearch = userEmail.toLowerCase();
+
+      const qEmail = query(
+        collection(db, 'tenants'),
+        where('ownerEmail', '==', userEmail)
+      );
+
+      const snapshotEmail = await getDocs(qEmail);
+
+      if (!snapshotEmail.empty) {
+        const docRef = snapshotEmail.docs[0].ref;
+
+        await updateDoc(docRef, { ownerId: userId });
+
+        return {
+          id: snapshotEmail.docs[0].id,
+          ...snapshotEmail.docs[0].data(),
+        };
+      }
+    }
+
+    console.warn('❌ No se encontró ningún negocio asociado a este usuario.');
+    return null;
+  } catch (error) {
+    console.error('🔥 Error crítico en getMyBusiness:', error);
+    return null;
   }
-  return null;
 };
 
 export const getCollection = async (collectionName, tenantId) => {
@@ -304,4 +328,12 @@ export const getReviews = async (tenantId) => {
     id: doc.id,
     ...doc.data(),
   }));
+};
+
+export const uploadResourcePhoto = async (file, tenantId) => {
+  const fileName = `resources/${tenantId}/ ${Date.now()}_${file.name}`;
+  const storageRef = ref(storage, fileName);
+
+  await uploadBytes(storageRef, file);
+  return await getDownloadURL(storageRef);
 };
