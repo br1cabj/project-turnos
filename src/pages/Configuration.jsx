@@ -587,7 +587,7 @@ export default function Configuration() {
               <Form.Control
                 required
                 autoFocus
-                placeholder={modalType === "service" ? "Ej: Corte Clásico" : "Ej: Juan Pérez"}
+                placeholder={modalType === "service" ? "Nombre del Servicio" : "Ej: Juan Pérez"}
                 value={formData.name || ""}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
               />

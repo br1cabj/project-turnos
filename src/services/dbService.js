@@ -313,7 +313,7 @@ export const createRecurringAppointments = async (
 export const createReview = async (reviewData) => {
   return await addDoc(collection(db, 'reviews'), {
     ...reviewData,
-    createAt: new Date(),
+    createdAt: new Date(),
   });
 };
 

@@ -50,7 +50,7 @@ export default function Sidebar() {
         <img
           src={currentLogo()}
           alt="CloudTurn Logo"
-          style={{ width: '100px', height: 'auto', display: 'block', margin: 'auto' }} />
+          style={{ width: '80px', height: 'auto', display: 'block', margin: 'auto' }} />
         <span className="fs-4 fw-bold" style={{ color: theme.sidebarText }}>CloudTurn</span>
       </div>
 
