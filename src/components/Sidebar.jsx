@@ -10,6 +10,7 @@ import {
 } from "react-bootstrap-icons";
 import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from "../contexts/AuthContext";
+import logoFull from '../assets/logo-full.png'
 
 export default function Sidebar() {
   const location = useLocation();
@@ -37,11 +38,19 @@ export default function Sidebar() {
     };
   };
 
+  const currentLogo = () => {
+    return logoFull
+  }
+
   return (
 
     <div className="d-flex flex-column p-3" style={{ height: "100%", width: "100%", minWidth: "250px", backgroundColor: theme.sidebarBg, color: theme.sidebarText }}>
 
       <div className="d-flex align-items-center mb-3 mb-md-0 me-md-auto text-decoration-none px-2">
+        <img
+          src={currentLogo()}
+          alt="CloudTurn Logo"
+          style={{ width: '100px', height: 'auto', display: 'block', margin: 'auto' }} />
         <span className="fs-4 fw-bold" style={{ color: theme.sidebarText }}>CloudTurn</span>
       </div>
 

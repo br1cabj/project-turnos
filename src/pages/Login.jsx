@@ -58,9 +58,12 @@ export default function Login() {
             </Form>
 
             <div className="w-100 text-center mt-3">
-              <Link to="/forgot-password" className="text-decoration-none text-muted">
-                ¿Olvidaste tu contraseña?
+              <Link to="/forgot-password" className="text-decoration-none text-primary fw-bold">
+                ¿Primera vez aquí? / ¿Olvidaste tu clave?
               </Link>
+              <div className="text-muted small mt-2">
+                Genera tu contraseña haciendo clic arriba.
+              </div>
             </div>
           </div>
         </Col>
@@ -75,17 +78,15 @@ export default function Login() {
             width: "100%"
           }}>
             <div style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-              backgroundColor: "rgba(0,0,0,0.5)",
+              position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
+              backgroundColor: "rgba(0,0,0,0.6)", // Un poco más oscuro para que se lea el texto
               display: "flex",
-              alignItems: "flex-end",
-              padding: "50px"
+              flexDirection: "column",
+              justifyContent: "center", // Centrado vertical
+              padding: "60px"
             }}>
-
+              <h1 className="text-white fw-bold display-4">CloudTurn</h1>
+              <p className="text-white fs-4">Gestiona tu negocio de forma inteligente.</p>
             </div>
           </div>
         </Col>
