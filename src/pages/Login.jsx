@@ -16,11 +16,25 @@ export default function Login() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+
+    const emailIngresado = emailRef.current.value;
+
     try {
       setError("");
       setLoading(true);
-      await login(emailRef.current.value, passwordRef.current.value);
+
+      await login(emailIngresado, passwordRef.current.value);
+
+      const SUPER_ADMIN_EMAIL = 'esquivelb136@gmail.com';
+
+      if (emailIngresado.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+
+        navigate("/super-admin");
+        return;
+      }
+
       navigate("/");
+
     } catch (error) {
       console.error(error);
       setError("Error al iniciar sesión. Verifica tus credenciales.");
