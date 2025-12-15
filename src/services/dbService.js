@@ -262,17 +262,22 @@ export const addClinicalNote = async (tenantId, clientId, text) => {
 
 export const getClinicalNotes = async (tenantId, clientId) => {
   const q = query(
-    collection(db, 'clinical_notes'),
+    collection(db, 'clinicalNotes'),
     where('tenantId', '==', tenantId),
     where('clientId', '==', clientId),
     orderBy('createdAt', 'desc')
   );
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-    createdAt: doc.data().createdAt.toDate(),
-  }));
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      ...data,
+      createdAt: data.createdAt?.toDate
+        ? data.createdAt.toDate()
+        : new Date(data.createdAt),
+    };
+  });
 };
 
 export const createRecurringAppointments = async (

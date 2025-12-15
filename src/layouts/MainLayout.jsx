@@ -1,57 +1,83 @@
-import React, { useState } from "react";
+import React from "react";
+import { Container } from "react-bootstrap";
 import Sidebar from "../components/Sidebar";
-import { Container, Button, Offcanvas, Navbar } from "react-bootstrap";
-import { List } from "react-bootstrap-icons";
-import { useTheme } from '../contexts/ThemeContext'
-
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function MainLayout({ children }) {
+  const { theme } = useTheme();
 
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-
-  const { theme } = useTheme()
-
-  const handleClose = () => setShowMobileMenu(false);
-  const handleShow = () => setShowMobileMenu(true);
   return (
-    <div className="d-flex" style={{ height: "100vh", overflow: "hidden" }}>
+    // CONTENEDOR PRINCIPAL
+    <div
+      className="d-flex flex-column flex-md-row"
+      style={{
+        height: "100vh",
+        overflow: "hidden",
+        backgroundColor: theme.mainBg || "#f8f9fa"
+      }}
+    >
 
-      {/* 1. SIDEBAR DE ESCRITORIO (Se oculta en cel) */}
-      <div className="d-none d-md-block border-end" style={{ backgroundColor: theme.sidebarBg, borderColor: theme.borderColor }}>
-        <Sidebar />
-      </div>
+      {/* 1. SIDEBAR */}
+      <Sidebar />
 
-      {/* 2. SIDEBAR (Offcanvas) */}
-      <Offcanvas show={showMobileMenu} onHide={handleClose} placement="start">
-        <Offcanvas.Header closeButton>
-          <Offcanvas.Title>Menú</Offcanvas.Title>
-        </Offcanvas.Header>
-        <Offcanvas.Body className="p-0" style={{ backgroundColor: theme.sidebarBg }}>
-          <div onClick={handleClose}>
-            <Sidebar />
-          </div>
-        </Offcanvas.Body>
-      </Offcanvas>
+      {/* 2. ÁREA DE CONTENIDO */}
+      <main
+        className="flex-grow-1 d-flex flex-column"
+        style={{
+          height: "100%",
+          overflow: "hidden",
+          position: "relative"
+        }}
+      >
+        <div
+          className="w-100 h-100 overflow-auto"
+          style={{
+            scrollBehavior: "smooth"
+          }}
+        >
+          <Container
+            fluid
+            className="p-4"
+            style={{
+              maxWidth: "1600px",
+              margin: "0 auto",
+              minHeight: "100%"
+            }}
+          >
 
-
-      {/* 3. ÁREA PRINCIPAL */}
-      <div className="flex-grow-1 d-flex flex-column" style={{ backgroundColor: theme.mainBg, transition: 'background-color 0.3s' }}>
-
-        {/* --- TOPBAR MÓVIL --- */}
-        <div className="d-md-none bg-white border-bottom p-2 d-flex align-items-center shadow-sm">
-          <Button variant="link" className="text-dark p-1" onClick={handleShow}>
-            <List size={28} />
-          </Button>
-          <span className="ms-2 fw-bold h5 mb-0">Panel de Turnos</span>
-        </div>
-
-        {/* --- CONTENIDO DINÁMICO --- */}
-        <div className="overflow-auto p-4" style={{ height: "100%" }}>
-          <Container fluid>
-            {children}
+            <div className="fade-in-up">
+              {children}
+            </div>
           </Container>
         </div>
-      </div>
+      </main>
+
+      <style>{`
+        /* Scrollbar personalizado sutil para Chrome/Safari/Edge */
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+          background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+          background: #cbd5e0; 
+          border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: #a0aec0; 
+        }
+
+        /* Animación de entrada */
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in-up {
+          animation: fadeInUp 0.4s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

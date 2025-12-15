@@ -5,6 +5,31 @@ import { getClientHistory, getClinicalNotes, addClinicalNote } from '../services
 import { useSector } from '../hooks/useSector';
 import Swal from 'sweetalert2';
 
+// --- HELPER ---
+const parseDate = (dateVal) => {
+  if (!dateVal) return new Date(0);
+  if (dateVal instanceof Date) return dateVal;
+  if (dateVal.seconds) return new Date(dateVal.seconds * 1000);
+  return new Date(dateVal);
+}
+
+const sortNotesDesc = (noteList) => {
+  return [...noteList].sort((a, b) => parseDate(b.createdAt) - parseDate(a.createdAt))
+}
+
+const formatDateTime = (dateObj) => {
+  if (!dateObj || isNaN(dateObj.getTime())) return "Fecha inválida";
+
+  return new Intl.DateTimeFormat('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(dateObj);
+};
+
 export default function ClientDetailsModal({ show, handleClose, client, tenant }) {
   const [activeTab, setActiveTab] = useState('history');
   const [appointments, setAppointments] = useState([]);
@@ -14,7 +39,6 @@ export default function ClientDetailsModal({ show, handleClose, client, tenant }
 
   const sector = useSector(tenant);
 
-
   useEffect(() => {
     const loadData = async () => {
       if (!client || !tenant?.id) return;
@@ -23,12 +47,13 @@ export default function ClientDetailsModal({ show, handleClose, client, tenant }
       try {
         // Cargar Historial
         const appts = await getClientHistory(tenant.id, client.name);
+        appts.sort((a, b) => parseDate(b.start) - parseDate(a.start));
         setAppointments(appts);
 
         // Cargar Notas Clínicas 
         if (sector.features?.clinicalHistory) {
           const clinicalData = await getClinicalNotes(tenant.id, client.id);
-          setNotes(clinicalData);
+          setNotes(sortNotesDesc(clinicalData));
         }
       } catch (error) {
         console.error("Error cargando detalles del cliente:", error);
@@ -50,9 +75,8 @@ export default function ClientDetailsModal({ show, handleClose, client, tenant }
       await addClinicalNote(tenant.id, client.id, newNote);
       setNewNote("");
 
-
       const updatedNotes = await getClinicalNotes(tenant.id, client.id);
-      setNotes(updatedNotes);
+      setNotes(sortNotesDesc(updatedNotes));
 
       const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
       Toast.fire({ icon: 'success', title: 'Nota agregada' });
@@ -92,12 +116,7 @@ export default function ClientDetailsModal({ show, handleClose, client, tenant }
                 <tbody>
                   {appointments.map(appt => (
                     <tr key={appt.id}>
-                      <td>
-                        {appt.start?.seconds
-                          ? new Date(appt.start.seconds * 1000).toLocaleDateString()
-                          : new Date(appt.start).toLocaleDateString()
-                        }
-                      </td>
+                      <td>{parseDate(appt.start).toLocaleDateString()}</td>
                       <td>{appt.title}</td>
                       <td>
                         <Badge bg={appt.status === 'paid' ? 'success' : 'secondary'}>
@@ -118,6 +137,7 @@ export default function ClientDetailsModal({ show, handleClose, client, tenant }
           {/* PESTAÑA 2: HISTORIA CLÍNICA (Solo Salud) */}
           {sector.features?.clinicalHistory && (
             <Tab eventKey="clinical" title={<span><FileText className="me-2" /> Historia Clínica</span>}>
+              {/* Formulario de Nueva Nota */}
               <div className="bg-light p-3 rounded mb-3 border">
                 <Form onSubmit={handleAddNote}>
                   <Form.Group className="mb-2">
@@ -130,28 +150,34 @@ export default function ClientDetailsModal({ show, handleClose, client, tenant }
                     />
                   </Form.Group>
                   <div className="d-flex justify-content-end">
-                    <Button size="sm" type="submit" variant="primary">
+                    <Button size="sm" type="submit" variant="primary" disabled={!newNote.trim()}>
                       <Plus className="me-1" /> Agregar Nota
                     </Button>
                   </div>
                 </Form>
               </div>
 
+              {/* Lista de Notas */}
               <div className="timeline" style={{ maxHeight: '400px', overflowY: 'auto' }}>
                 {notes.map(note => (
-                  <Card key={note.id} className="mb-2 border-0 shadow-sm">
+                  <Card key={note.id} className="mb-2 border-0 shadow-sm animate__animated animate__fadeIn">
                     <Card.Body className="p-3">
                       <div className="d-flex justify-content-between text-muted small mb-2 border-bottom pb-1">
-                        <span>{note.createdAt ? new Date(note.createdAt).toLocaleString() : "-"}</span>
-                        <span>{note.createdBy}</span>
+                        {/* Usamos el helper parseDate para evitar errores con Timestamps */}
+                        <span className="fw-bold text-primary">
+                          {formatDateTime(parseDate(note.createdAt))}
+                        </span>
+                        <span>{note.createdBy || 'Usuario'}</span>
                       </div>
                       <p className="mb-0 text-dark" style={{ whiteSpace: 'pre-wrap' }}>{note.text}</p>
                     </Card.Body>
                   </Card>
                 ))}
+
                 {notes.length === 0 && !loading && (
                   <p className="text-center text-muted py-3">No hay notas clínicas aún.</p>
                 )}
+                {loading && <p className="text-center text-muted">Cargando...</p>}
               </div>
             </Tab>
           )}
