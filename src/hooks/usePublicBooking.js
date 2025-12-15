@@ -29,91 +29,141 @@ export function usePublicBooking(slug) {
     time: null,
     clientName: '',
     clientPhone: '',
+    clientEmail: '',
+    notes: '',
   });
 
   const [availableSlots, setAvailableSlots] = useState([]);
 
-  // --- CARGA INICIAL ---
+  // --- 1. CARGA INICIAL ---
   useEffect(() => {
+    let isMounted = true;
+
     async function init() {
+      if (!slug) return;
       try {
         const business = await getTenantBySlug(slug);
-        if (!business) throw new Error('Negocio no encontrado');
 
-        setTenant(business);
-        const [s, r] = await Promise.all([
-          getCollection('services', business.id),
-          getCollection('resources', business.id),
-        ]);
+        if (!business)
+          throw new Error('Negocio no encontrado o enlace inválido.');
+        if (business.status === 'suspended')
+          throw new Error(
+            'Este negocio no está aceptando turnos temporalmente.'
+          );
 
-        setServices(s);
-        setResources(r);
+        if (isMounted) {
+          setTenant(business);
+          // Carga paralela para velocidad
+          const [s, r] = await Promise.all([
+            getCollection('services', business.id),
+            getCollection('resources', business.id),
+          ]);
+          setServices(s);
+          setResources(r);
+        }
       } catch (err) {
-        setError(err.message || 'Error al cargar');
+        if (isMounted)
+          setError(err.message || 'Error al cargar información del negocio.');
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     }
     init();
+
+    return () => {
+      isMounted = false;
+    };
   }, [slug]);
 
-  // --- 2. CÁLCULO DE HORARIOS ---
+  // --- 2. CÁLCULO DE HORARIOS (Lógica Avanzada) ---
   const calculateAvailability = useCallback(
-    async (date, service, resourceId) => {
-      setAvailableSlots([]);
-      if (!date || !service || !tenant) return;
+    async (dateStr, service, selectedResource) => {
+      setAvailableSlots([]); // Limpiar mientras calcula
+      if (!dateStr || !service || !tenant) return;
 
-      const dateObj = new Date(date + 'T00:00:00');
+      // A. Configuración del día
+      const dateObj = new Date(`${dateStr}T00:00:00`);
       const dayIndex = dateObj.getDay();
+
       const dayConfig = tenant.openingHours?.[dayIndex];
 
-      if (!dayConfig || !dayConfig.isOpen) return;
+      if (!dayConfig || !dayConfig.isOpen) {
+        console.log('Día cerrado según configuración');
+        return;
+      }
 
-      // B. Obtener turnos existentes
-      const existingAppointments = await getAppointmentsByDate(tenant.id, date);
+      // B. Obtener turnos existentes de la DB
+      const existingAppointments = await getAppointmentsByDate(
+        tenant.id,
+        dateStr
+      );
 
-      // C. Generar slots
-      let slots = [];
-      const duration = service.duration;
-      const [startH, startM] = dayConfig.start.split(':');
-      const [endH, endM] = dayConfig.end.split(':');
+      // C. Preparar variables de tiempo
+      const durationMs = service.duration * 60000;
+      const [startH, startM] = dayConfig.start.split(':').map(Number);
+      const [endH, endM] = dayConfig.end.split(':').map(Number);
 
-      let current = new Date(dateObj);
-      current.setHours(parseInt(startH), parseInt(startM), 0);
+      // Definir inicio y fin del día laboral en timestamps
+      const workStart = new Date(dateObj);
+      workStart.setHours(startH, startM, 0, 0);
 
-      const endTime = new Date(dateObj);
-      endTime.setHours(parseInt(endH), parseInt(endM), 0);
+      const workEnd = new Date(dateObj);
+      workEnd.setHours(endH, endM, 0, 0);
 
-      while (current < endTime) {
-        const slotStart = new Date(current);
-        const slotEnd = new Date(current.getTime() + duration * 60000);
+      // Si es "HOY", no mostrar horarios pasados
+      const now = new Date();
+      let iteratorTime = new Date(workStart);
 
-        if (slotEnd > endTime) break;
+      if (
+        now.getDate() === dateObj.getDate() &&
+        now.getMonth() === dateObj.getMonth()
+      ) {
+        if (now > iteratorTime) {
+          iteratorTime = new Date(now);
+          const remainder = 30 - (iteratorTime.getMinutes() % 30);
+          iteratorTime.setMinutes(iteratorTime.getMinutes() + remainder);
+          iteratorTime.setSeconds(0);
+        }
+      }
 
-        // D. Chequeo de colisiones
-        let isBusy = false;
+      const slots = [];
 
-        if (resourceId) {
-          isBusy = existingAppointments.some(
+      const STEP_MINUTES = 30;
+
+      while (iteratorTime.getTime() + durationMs <= workEnd.getTime()) {
+        const slotStart = new Date(iteratorTime);
+        const slotEnd = new Date(iteratorTime.getTime() + durationMs);
+
+        // E. Chequeo de Disponibilidad
+        let isAvailable = false;
+
+        if (selectedResource) {
+          const hasConflict = existingAppointments.some(
             (appt) =>
-              appt.resourceId === resourceId &&
+              appt.resourceId === selectedResource.id &&
               slotStart < appt.end &&
               slotEnd > appt.start
           );
+          isAvailable = !hasConflict;
         } else {
-          const overlapping = existingAppointments.filter(
-            (appt) => slotStart < appt.end && slotEnd > appt.start
-          );
-          if (overlapping.length >= resources.length) isBusy = true;
+          // Filtramos qué recursos están ocupados en este slot
+          const busyResourceIds = existingAppointments
+            .filter((appt) => slotStart < appt.end && slotEnd > appt.start)
+            .map((appt) => appt.resourceId);
+
+          if (busyResourceIds.length < resources.length) {
+            isAvailable = true;
+          }
         }
 
-        if (!isBusy) {
+        if (isAvailable) {
           const h = slotStart.getHours().toString().padStart(2, '0');
           const m = slotStart.getMinutes().toString().padStart(2, '0');
           slots.push(`${h}:${m}`);
         }
 
-        current.setMinutes(current.getMinutes() + 30);
+        // Avanzar iterador
+        iteratorTime.setMinutes(iteratorTime.getMinutes() + STEP_MINUTES);
       }
 
       setAvailableSlots(slots);
@@ -123,8 +173,11 @@ export function usePublicBooking(slug) {
 
   useEffect(() => {
     if (step === 3 && bookingData.date && bookingData.service) {
-      const resId = bookingData.resource?.id || null;
-      calculateAvailability(bookingData.date, bookingData.service, resId);
+      calculateAvailability(
+        bookingData.date,
+        bookingData.service,
+        bookingData.resource
+      );
     }
   }, [
     bookingData.date,
@@ -134,34 +187,73 @@ export function usePublicBooking(slug) {
     calculateAvailability,
   ]);
 
-  // --- ACCIONES ---
+  // --- 3. ACCIONES ---
 
   const updateBooking = (field, value) => {
     setBookingData((prev) => ({ ...prev, [field]: value }));
   };
 
   const nextStep = () => setStep((prev) => prev + 1);
-  const prevStep = () => setStep((prev) => prev - 1);
+  const prevStep = () => setStep((prev) => Math.max(1, prev - 1));
+
+  // ASIGNACIÓN INTELIGENTE DE RECURSO
+  const getBestAvailableResource = async (slotStart, slotEnd) => {
+    if (bookingData.resource) return bookingData.resource;
+
+    const dateStr = bookingData.date;
+    const existingAppointments = await getAppointmentsByDate(
+      tenant.id,
+      dateStr
+    );
+
+    // Identificar recursos ocupados en ese rango
+    const busyResourceIds = existingAppointments
+      .filter((appt) => slotStart < appt.end && slotEnd > appt.start)
+      .map((appt) => appt.resourceId);
+
+    // Filtrar recursos disponibles
+    const availableResources = resources.filter(
+      (r) => !busyResourceIds.includes(r.id)
+    );
+
+    if (availableResources.length === 0)
+      throw new Error('Lo sentimos, el horario ya no está disponible.');
+
+    const randomIndex = Math.floor(Math.random() * availableResources.length);
+    return availableResources[randomIndex];
+  };
 
   const confirmBooking = async (e) => {
     e.preventDefault();
     setProcessing(true);
-    try {
-      const { service, resource, date, time, clientName, clientPhone } =
-        bookingData;
 
+    try {
+      const {
+        service,
+        date,
+        time,
+        clientName,
+        clientPhone,
+        clientEmail,
+        notes,
+      } = bookingData;
+
+      // Reconstruir fechas (Objetos Date)
       const start = new Date(`${date}T${time}`);
       const end = new Date(start.getTime() + service.duration * 60000);
 
-      const finalResource = resource || resources[0];
+      // ASIGNACIÓN FINAL DE RECURSO
+      const assignedResource = await getBestAvailableResource(start, end);
 
       const newAppt = {
         tenantId: tenant.id,
         title: service.name,
         client: clientName,
         clientPhone: clientPhone,
-        resourceId: finalResource.id,
-        resourceName: finalResource.name,
+        clientEmail: clientEmail || '',
+        notes: notes || '',
+        resourceId: assignedResource.id,
+        resourceName: assignedResource.name,
         serviceId: service.id,
         price: service.price,
         start,
@@ -174,17 +266,27 @@ export function usePublicBooking(slug) {
       };
 
       await createAppointment(newAppt);
+
+      // Enviar email (no bloqueante)
       sendNewBookingAlert(
         { ...newAppt, tenantName: tenant.name },
         tenant.ownerEmail
-      );
+      ).catch((err) => console.warn('Fallo envío email:', err));
 
-      setStep(5); // Éxito
+      setStep(5); // Pantalla Éxito
     } catch (error) {
       console.error(error);
-      Swal.fire('Error', 'No pudimos procesar la reserva', 'error');
+      Swal.fire(
+        'Ups!',
+        error.message ||
+          'No pudimos procesar la reserva. Intenta otro horario.',
+        'error'
+      );
+      // Si falla por disponibilidad, podríamos volver al paso 3
+      if (error.message.includes('disponible')) setStep(3);
+    } finally {
+      setProcessing(false);
     }
-    setProcessing(false);
   };
 
   const submitReview = async (reviewData) => {
@@ -194,11 +296,11 @@ export function usePublicBooking(slug) {
         ...reviewData,
         tenantId: tenant.id,
         createdAt: new Date(),
-        approved: true,
+        approved: true, // Auto-aprobar o false para moderación
       });
-      Swal.fire('¡Gracias!', 'Tu calificación ha sido enviada.', 'success');
       return true;
     } catch (e) {
+      console.error(e);
       Swal.fire('Error', 'No se pudo enviar la reseña', 'error');
       return false;
     } finally {

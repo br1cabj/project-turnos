@@ -1,95 +1,107 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import MainLayout from "../layouts/MainLayout";
 import { Table, Button, Form, Card, Modal, Row, Col, Spinner, Badge } from "react-bootstrap";
-import { Search, Whatsapp, Pencil, Trash, PersonPlus, Funnel } from "react-bootstrap-icons";
+import { Search, Whatsapp, Pencil, Trash, PersonPlus } from "react-bootstrap-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { getMyBusiness, getCollection, saveDocument, deleteDocument, updateDocument, exportToCSV } from "../services/dbService";
 import Swal from 'sweetalert2';
 import ClientDetailsModal from '../components/ClientDetailsModal';
 
+const INITIAL_FORM_STATE = { name: "", phone: "", email: "", notes: "" };
+
 export default function Clients() {
   const { currentUser } = useAuth();
+
+  // Estados de Datos
   const [tenant, setTenant] = useState(null);
-
-  // Datos
   const [clients, setClients] = useState([]);
-  const [loadingData, setLoadingData] = useState(true); // Nuevo estado de carga inicial
+  const [loadingData, setLoadingData] = useState(true);
 
-  // Filtros
+  // Estados de UI y Filtros
   const [searchTerm, setSearchTerm] = useState("");
-
-  // Modal y Formulario
   const [showModal, setShowModal] = useState(false);
-  const [isEditing, setIsEditing] = useState(false); // Para diferenciar Crear de Editar
+  const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-
-  const initialFormState = { name: "", phone: "", email: "", notes: "" };
-  const [formData, setFormData] = useState(initialFormState);
-
-  const [selectedClient, setSelectedClient] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
 
-  // 1. Cargar Datos
-  useEffect(() => {
-    async function init() {
-      if (currentUser) {
-        try {
-          const business = await getMyBusiness(currentUser.uid, currentUser.email);
-          setTenant(business);
-          if (business) {
-            // Llamamos directamente a la función de DB aquí adentro
-            const data = await getCollection("clients", business.id);
-            // Ordenamos
-            const sorted = data.sort((a, b) => a.name.localeCompare(b.name));
-            setClients(sorted);
-          }
-        } catch (error) {
-          console.error("Error cargando datos:", error);
-        }
-        setLoadingData(false);
-      }
-    }
-    init();
-  }, [currentUser]);
+  // Estado del Formulario
+  const [formData, setFormData] = useState(INITIAL_FORM_STATE);
 
-  // Función auxiliar para recargar clientes
-  const reloadClients = async (tenantId = tenant?.id) => {
-    if (tenantId) {
+  // Función para cargar clientes
+  const loadClients = useCallback(async (tenantId) => {
+    try {
       const data = await getCollection("clients", tenantId);
-      // Ordenamos alfabéticamente por nombre
       const sorted = data.sort((a, b) => a.name.localeCompare(b.name));
       setClients(sorted);
+    } catch (error) {
+      console.error("Error al cargar clientes:", error);
+    }
+  }, []);
+
+  // 1. Cargar Datos Iniciales
+  useEffect(() => {
+    let isMounted = true;
+
+    async function init() {
+      if (!currentUser) return;
+      try {
+        const business = await getMyBusiness(currentUser.uid, currentUser.email);
+        if (isMounted) {
+          setTenant(business);
+          if (business?.id) {
+            await loadClients(business.id);
+          }
+        }
+      } catch (error) {
+        console.error("Error cargando datos:", error);
+        Swal.fire('Error', 'No se pudieron cargar los datos del negocio.', 'error');
+      } finally {
+        if (isMounted) setLoadingData(false);
+      }
+    }
+
+    init();
+
+    return () => { isMounted = false; };
+  }, [currentUser, loadClients]);
+
+
+
+  // Recargar clientes wrapper
+  const handleReloadClients = async () => {
+    if (tenant?.id) {
+      await loadClients(tenant.id);
     }
   };
 
-  // Filtrado Mejorado (busca en nombre, telefono y email)
-  const filteredClients = clients.filter(client => {
+  // Filtrado optimizado con useMemo
+  const filteredClients = useMemo(() => {
+    if (!searchTerm) return clients;
     const term = searchTerm.toLowerCase();
-    return (
+    return clients.filter(client =>
       client.name.toLowerCase().includes(term) ||
       (client.phone && client.phone.includes(term)) ||
       (client.email && client.email.toLowerCase().includes(term))
     );
-  });
+  }, [clients, searchTerm]);
 
-  // Manejo de Inputs
+  // Handlers del Formulario
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Preparar Modal para Nuevo Cliente
   const handleOpenCreate = () => {
     setIsEditing(false);
     setEditingId(null);
-    setFormData(initialFormState);
+    setFormData(INITIAL_FORM_STATE);
     setShowModal(true);
   };
 
-  // Preparar Modal para Editar (Desde la tabla)
   const handleOpenEdit = (e, client) => {
-    e.stopPropagation(); // Evita abrir el detalle
+    e.stopPropagation();
     setIsEditing(true);
     setEditingId(client.id);
     setFormData({
@@ -101,24 +113,33 @@ export default function Clients() {
     setShowModal(true);
   };
 
-  // Guardar Cliente (Crear o Editar)
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setFormData(INITIAL_FORM_STATE);
+    setSubmitting(false);
+  };
+
+  // Guardar Cliente
   const handleSave = async (e) => {
     e.preventDefault();
 
-    if (!tenant) return Swal.fire('Error', 'No se ha cargado la información del negocio.', 'error');
-
-    // Validación simple
-    if (!formData.name.trim()) return Swal.fire('Atención', 'El nombre es obligatorio', 'warning');
+    if (!tenant?.id) return Swal.fire('Error', 'Información del negocio no disponible.', 'error');
+    if (!formData.name.trim()) return Swal.fire('Atención', 'El nombre es obligatorio.', 'warning');
 
     setSubmitting(true);
     try {
-      // Limpieza de datos (Teléfono solo números)
       const cleanPhone = formData.phone.replace(/[^0-9+]/g, '');
-      const dataToSave = { ...formData, phone: cleanPhone, tenantId: tenant.id };
+      const dataToSave = {
+        ...formData,
+        phone: cleanPhone,
+        tenantId: tenant.id,
+        // Añadir timestamps si es creación
+        ...(isEditing ? { updatedAt: new Date() } : { createdAt: new Date() })
+      };
 
-      // Verificar duplicados solo si es nuevo
-      if (!isEditing) {
-        const exists = clients.some(c => c.phone === cleanPhone && c.phone !== "");
+      // Validación de duplicados (solo teléfono y si no está vacío)
+      if (!isEditing && cleanPhone) {
+        const exists = clients.some(c => c.phone === cleanPhone);
         if (exists) {
           setSubmitting(false);
           return Swal.fire('Duplicado', 'Ya existe un cliente con este teléfono.', 'warning');
@@ -131,67 +152,72 @@ export default function Clients() {
         await saveDocument("clients", dataToSave);
       }
 
-      await reloadClients();
-      setShowModal(false);
-      setFormData(initialFormState);
+      await handleReloadClients();
+      handleCloseModal();
 
-      const Toast = Swal.mixin({
+      Swal.fire({
+        icon: 'success',
+        title: isEditing ? 'Cliente actualizado' : 'Cliente creado',
         toast: true,
         position: 'top-end',
         showConfirmButton: false,
         timer: 3000
       });
-      Toast.fire({
-        icon: 'success',
-        title: isEditing ? 'Cliente actualizado' : 'Cliente creado'
-      });
 
     } catch (error) {
-      console.error(error);
-      Swal.fire('Error', 'Hubo un error al guardar', 'error');
+      console.error("Error al guardar cliente:", error);
+      Swal.fire('Error', 'Hubo un problema al guardar los datos.', 'error');
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
-  // Borrar Cliente
+  // Eliminar Cliente
   const handleDelete = async (e, id) => {
     e.stopPropagation();
 
     const result = await Swal.fire({
       title: '¿Estás seguro?',
-      text: "Se eliminará este cliente y no podrás recuperarlo.",
+      text: "Esta acción eliminará al cliente permanentemente.",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#d33',
-      confirmButtonText: 'Sí, borrar',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Sí, eliminar',
       cancelButtonText: 'Cancelar'
     });
 
     if (result.isConfirmed) {
       try {
         await deleteDocument("clients", id);
-        await reloadClients();
-        Swal.fire('Borrado', 'El cliente ha sido eliminado.', 'success');
+        // Actualización optimista
+        setClients(prev => prev.filter(c => c.id !== id));
+
+        Swal.fire({
+          title: 'Eliminado',
+          icon: 'success',
+          toast: true,
+          position: 'top-end',
+          showConfirmButton: false,
+          timer: 2000
+        });
       } catch (error) {
-        console.error(error);
-        Swal.fire('Error', 'No se pudo borrar', 'error');
+        console.error("Error al eliminar cliente:", error);
+        Swal.fire('Error', 'No se pudo eliminar el cliente.', 'error');
       }
     }
   };
 
+  // Detalles del Cliente
   const handleOpenDetails = (client) => {
     setSelectedClient(client);
     setShowDetails(true);
   };
 
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setFormData(initialFormState);
-  };
-
   return (
     <MainLayout>
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+      {/* Header Sección */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3 animate__animated animate__fadeIn">
         <div>
           <h2 className="fw-bold text-dark mb-0">Gestión de Clientes</h2>
           <p className="text-muted mb-0">{clients.length} clientes registrados</p>
@@ -201,10 +227,10 @@ export default function Clients() {
           <Button
             variant="outline-success"
             className="shadow-sm d-flex align-items-center"
-            onClick={() => exportToCSV(clients, 'mis-clientes')}
+            onClick={() => exportToCSV(clients, `clientes-${new Date().toISOString().slice(0, 10)}`)}
             disabled={clients.length === 0}
           >
-            📥 <span className="d-none d-md-inline ms-2">Exportar</span>
+            📥 <span className="d-none d-md-inline ms-2">Exportar CSV</span>
           </Button>
 
           <Button variant="primary" className="shadow-sm d-flex align-items-center" onClick={handleOpenCreate}>
@@ -213,9 +239,11 @@ export default function Clients() {
         </div>
       </div>
 
-      <Card className="border-0 shadow-sm">
+      {/* Panel Principal */}
+      <Card className="border-0 shadow-sm animate__animated animate__fadeInUp">
         <Card.Body className="p-0">
-          {/* BARRA DE BÚSQUEDA Y FILTROS */}
+
+          {/* Barra de Filtros */}
           <div className="p-3 border-bottom bg-light d-flex align-items-center">
             <div className="input-group" style={{ maxWidth: "400px" }}>
               <span className="input-group-text bg-white border-end-0 text-muted">
@@ -223,119 +251,137 @@ export default function Clients() {
               </span>
               <Form.Control
                 placeholder="Buscar por nombre, teléfono o email..."
-                className="border-start-0 ps-0"
+                className="border-start-0 ps-0 shadow-none"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             {searchTerm && (
-              <Button variant="link" className="text-decoration-none ms-2" onClick={() => setSearchTerm("")}>
+              <Button variant="link" className="text-decoration-none ms-2 text-muted" onClick={() => setSearchTerm("")}>
                 Limpiar
               </Button>
             )}
           </div>
 
-          {/* TABLA DE CLIENTES */}
+          {/* Tabla de Datos */}
           {loadingData ? (
             <div className="text-center py-5">
-              <Spinner animation="border" variant="primary" />
-              <p className="mt-2 text-muted">Cargando tu cartera de clientes...</p>
+              <Spinner animation="border" variant="primary" role="status" />
+              <p className="mt-2 text-muted small">Cargando cartera de clientes...</p>
             </div>
           ) : (
-            <Table hover responsive className="align-middle mb-0">
-              <thead className="bg-light text-secondary">
-                <tr>
-                  <th className="ps-4">Cliente</th>
-                  <th>Contacto</th>
-                  <th className="d-none d-md-table-cell">Notas</th>
-                  <th className="text-end pe-4">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredClients.map(client => (
-                  <tr key={client.id} style={{ cursor: 'pointer' }} onClick={() => handleOpenDetails(client)}>
-                    <td className="ps-4">
-                      <div className="d-flex align-items-center">
-                        <div className="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style={{ width: 40, height: 40, fontSize: '1.2rem' }}>
-                          {client.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="fw-bold text-dark">{client.name}</div>
-                          <small className="text-muted" style={{ fontSize: '0.75rem' }}>Registrado el {client.createdAt ? new Date(client.createdAt.seconds * 1000).toLocaleDateString() : '-'}</small>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      {client.email && <div className="small text-muted mb-1">✉️ {client.email}</div>}
-                      {client.phone ? (
-                        <div className="d-flex align-items-center">
-                          <Badge bg="success" className="me-2 rounded-pill bg-opacity-10 text-success border border-success">
-                            📱 {client.phone}
-                          </Badge>
-                          <a
-                            href={`https://wa.me/${client.phone.replace(/[^0-9]/g, '')}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-success hover-scale"
-                            title="Abrir WhatsApp"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Whatsapp size={18} />
-                          </a>
-                        </div>
-                      ) : <span className="text-muted small">- Sin teléfono -</span>}
-                    </td>
-                    <td className="d-none d-md-table-cell text-muted small">
-                      {client.notes ? (
-                        <div style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          📝 {client.notes}
-                        </div>
-                      ) : '-'}
-                    </td>
-                    <td className="text-end pe-4">
-                      <Button
-                        variant="link"
-                        className="text-primary p-1 me-2"
-                        title="Editar rápido"
-                        onClick={(e) => handleOpenEdit(e, client)}
-                      >
-                        <Pencil />
-                      </Button>
-                      <Button
-                        variant="link"
-                        className="text-danger p-1"
-                        title="Eliminar"
-                        onClick={(e) => handleDelete(e, client.id)}
-                      >
-                        <Trash />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-                {filteredClients.length === 0 && (
+            <div className="table-responsive">
+              <Table hover className="align-middle mb-0">
+                <thead className="bg-light text-secondary small text-uppercase">
                   <tr>
-                    <td colSpan="4" className="text-center py-5">
-                      <div className="text-muted mb-3" style={{ fontSize: '3rem' }}>🤷‍♂️</div>
-                      <h5 className="text-muted">No encontramos clientes</h5>
-                      <p className="text-muted small">Prueba con otra búsqueda o agrega uno nuevo.</p>
-                    </td>
+                    <th className="ps-4 border-0">Cliente</th>
+                    <th className="border-0">Contacto</th>
+                    <th className="d-none d-md-table-cell border-0">Notas</th>
+                    <th className="text-end pe-4 border-0" style={{ minWidth: '100px' }}>Acciones</th>
                   </tr>
-                )}
-              </tbody>
-            </Table>
+                </thead>
+                <tbody>
+                  {filteredClients.map(client => (
+                    <tr
+                      key={client.id}
+                      style={{ cursor: 'pointer', transition: 'background-color 0.2s' }}
+                      onClick={() => handleOpenDetails(client)}
+                    >
+                      <td className="ps-4">
+                        <div className="d-flex align-items-center">
+                          <div
+                            className="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center me-3 fw-bold"
+                            style={{ width: 40, height: 40, fontSize: '1.1rem' }}
+                          >
+                            {client.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="fw-bold text-dark">{client.name}</div>
+                            <small className="text-muted" style={{ fontSize: '0.75rem' }}>
+                              ID: {client.id.substring(0, 6)}...
+                            </small>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        {client.email && (
+                          <div className="small text-muted mb-1 d-flex align-items-center gap-1">
+                            ✉️ {client.email}
+                          </div>
+                        )}
+                        {client.phone ? (
+                          <div className="d-flex align-items-center mt-1">
+                            <Badge bg="success" className="me-2 rounded-pill bg-opacity-10 text-success border border-success fw-normal">
+                              📱 {client.phone}
+                            </Badge>
+                            <a
+                              href={`https://wa.me/${client.phone.replace(/[^0-9]/g, '')}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-success hover-scale p-1"
+                              title="Enviar WhatsApp"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Whatsapp size={18} />
+                            </a>
+                          </div>
+                        ) : <span className="text-muted small fst-italic">- Sin teléfono -</span>}
+                      </td>
+                      <td className="d-none d-md-table-cell text-muted small">
+                        {client.notes ? (
+                          <div className="text-truncate" style={{ maxWidth: '250px' }} title={client.notes}>
+                            📝 {client.notes}
+                          </div>
+                        ) : <span className="opacity-50">-</span>}
+                      </td>
+                      <td className="text-end pe-4">
+                        <Button
+                          variant="link"
+                          className="text-secondary p-1 me-1 hover-primary"
+                          title="Editar"
+                          onClick={(e) => handleOpenEdit(e, client)}
+                        >
+                          <Pencil size={16} />
+                        </Button>
+                        <Button
+                          variant="link"
+                          className="text-muted p-1 hover-danger"
+                          title="Eliminar"
+                          onClick={(e) => handleDelete(e, client.id)}
+                        >
+                          <Trash size={16} />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {filteredClients.length === 0 && (
+                    <tr>
+                      <td colSpan="4" className="text-center py-5">
+                        <div className="text-muted mb-3 opacity-50" style={{ fontSize: '2.5rem' }}>🔍</div>
+                        <h6 className="text-muted fw-bold">No se encontraron clientes</h6>
+                        <p className="text-muted small mb-0">Intenta con otra búsqueda o agrega un nuevo registro.</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </Table>
+            </div>
           )}
         </Card.Body>
       </Card>
 
-      {/* MODAL CREAR / EDITAR */}
-      <Modal show={showModal} onHide={handleCloseModal} centered>
-        <Modal.Header closeButton className="bg-primary text-white">
-          <Modal.Title>{isEditing ? "✏️ Editar Cliente" : "👤 Nuevo Cliente"}</Modal.Title>
+      {/* Modal Crear / Editar */}
+      <Modal show={showModal} onHide={handleCloseModal} centered backdrop="static">
+        <Modal.Header closeButton className={isEditing ? "bg-warning bg-opacity-10" : "bg-primary bg-opacity-10"}>
+          <Modal.Title className={`fs-5 fw-bold ${isEditing ? "text-dark" : "text-primary"}`}>
+            {isEditing ? "✏️ Editar Cliente" : "👤 Nuevo Cliente"}
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body className="p-4">
           <Form onSubmit={handleSave}>
             <Form.Group className="mb-3">
-              <Form.Label className="fw-bold">Nombre Completo</Form.Label>
+              <Form.Label className="fw-bold small text-muted text-uppercase">Nombre Completo <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 name="name"
                 required
@@ -343,32 +389,31 @@ export default function Clients() {
                 placeholder="Ej: Juan Pérez"
                 value={formData.name}
                 onChange={handleChange}
+                className="form-control-lg fs-6"
               />
             </Form.Group>
 
-            <Row>
+            <Row className="g-3 mb-3">
               <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Teléfono / WhatsApp</Form.Label>
+                <Form.Group>
+                  <Form.Label className="fw-bold small text-muted text-uppercase">Teléfono / WhatsApp</Form.Label>
                   <Form.Control
                     name="phone"
                     type="tel"
-                    placeholder="Ej: 54911223344"
+                    placeholder="Ej: 54911..."
                     value={formData.phone}
                     onChange={handleChange}
                   />
-                  <Form.Text className="text-muted" style={{ fontSize: '0.7rem' }}>
-                    Sin espacios ni guiones.
-                  </Form.Text>
+                  <Form.Text className="text-muted sx-small">Solo números.</Form.Text>
                 </Form.Group>
               </Col>
               <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Email (Opcional)</Form.Label>
+                <Form.Group>
+                  <Form.Label className="fw-bold small text-muted text-uppercase">Email</Form.Label>
                   <Form.Control
                     name="email"
                     type="email"
-                    placeholder="cliente@email.com"
+                    placeholder="cliente@mail.com"
                     value={formData.email}
                     onChange={handleChange}
                   />
@@ -376,36 +421,46 @@ export default function Clients() {
               </Col>
             </Row>
 
-            <Form.Group className="mb-3">
-              <Form.Label>Notas Internas</Form.Label>
+            <Form.Group className="mb-4">
+              <Form.Label className="fw-bold small text-muted text-uppercase">Notas Internas</Form.Label>
               <Form.Control
                 name="notes"
                 as="textarea"
                 rows={3}
-                placeholder="Preferencias, alergias, datos importantes..."
+                placeholder="Datos importantes, preferencias, etc..."
                 value={formData.notes}
                 onChange={handleChange}
               />
             </Form.Group>
 
-            <div className="d-grid gap-2 mt-4">
-              <Button type="submit" disabled={submitting} size="lg" variant="primary" className="shadow-sm">
-                {submitting ? "Guardando..." : (isEditing ? "Actualizar Datos" : "Guardar Cliente")}
+            <div className="d-grid gap-2">
+              <Button type="submit" disabled={submitting} size="lg" variant={isEditing ? "warning" : "primary"} className="fw-bold shadow-sm">
+                {submitting ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" /> : (isEditing ? "Guardar Cambios" : "Registrar Cliente")}
+              </Button>
+              <Button variant="link" className="text-muted text-decoration-none" onClick={handleCloseModal} disabled={submitting}>
+                Cancelar
               </Button>
             </div>
           </Form>
         </Modal.Body>
       </Modal>
 
+      {/* Modal Detalles */}
       <ClientDetailsModal
         show={showDetails}
         handleClose={() => setShowDetails(false)}
         client={selectedClient}
         tenant={tenant}
-        // Pasamos reloadClients para que si editas algo en el modal de detalles, se actualice la lista
-        onUpdate={reloadClients}
+        onUpdate={handleReloadClients}
       />
 
+      {/* Estilos CSS Inline */}
+      <style>{`
+        .hover-scale:hover { transform: scale(1.2); transition: transform 0.2s; }
+        .hover-primary:hover { color: #0d6efd !important; background-color: #e7f1ff; border-radius: 4px; }
+        .hover-danger:hover { color: #dc3545 !important; background-color: #fee2e2; border-radius: 4px; }
+        .sx-small { font-size: 0.75rem; }
+      `}</style>
     </MainLayout>
   );
 }

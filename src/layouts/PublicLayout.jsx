@@ -1,56 +1,83 @@
 import React from 'react';
 import { Container } from 'react-bootstrap';
-import { LightningChargeFill } from 'react-bootstrap-icons';
-import { Whatsapp } from 'react-bootstrap-icons'
+import { Whatsapp, LightningChargeFill } from 'react-bootstrap-icons';
 
 export default function PublicLayout({ children }) {
-  const PHONE_NUMBER = '5493884442727';
-  const message = "Hola! Vi el sistema de turnos y me interesa tener uno para mi negocio.";
+  const PHONE_NUMBER = '5493884442727'; // Tu número de ventas
+  const message = "Hola! Vi el sistema de turnos CloudTurn y me interesa tener uno para mi negocio.";
   const whatsappUrl = `https://wa.me/${PHONE_NUMBER}?text=${encodeURIComponent(message)}`;
+
   return (
-    <div
-      style={{
-        backgroundColor: "#f8f9fa",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column"
-      }}
-    >
-      {/* --- HEADER --- */}
-      <div className="bg-white shadow-sm py-3 mb-4">
-        <Container className="text-center">
-          <h5 className="mb-0 fw-bold text-primary">CloudStock</h5>
+    <div className="layout-wrapper">
+
+      {/* --- HEADER (Marca del Software) --- */}
+      <header className="bg-white shadow-sm py-3 sticky-top">
+        <Container className="d-flex justify-content-center align-items-center">
+          <div className="d-flex align-items-center text-primary gap-2">
+            <LightningChargeFill size={20} />
+            <h5 className="mb-0 fw-bold tracking-tight">CloudTurn</h5>
+          </div>
         </Container>
-      </div>
+      </header>
 
-      {/* --- CONTENIDO PRINCIPAL --- */}
-      <Container style={{ maxWidth: "600px", flex: 1 }}>
-        {children}
-      </Container>
+      {/* --- CONTENIDO PRINCIPAL (Wizard) --- */}
+      <main className="flex-grow-1 py-4 d-flex justify-content-center">
+        <Container style={{ maxWidth: "600px", width: "100%" }}>
+          {children}
+        </Container>
+      </main>
 
-      {/* --- FOOTER PROMOCIONAL --- */}
-      <footer className="text-center py-4 mt-auto">
-        <hr className="w-50 mx-auto text-muted mb-3" />
+      {/* --- FOOTER (Powered By) --- */}
+      <footer className="bg-light py-4 mt-auto border-top">
+        <Container className="text-center">
 
-        <div className="text-muted small mb-2">
-          ¿Te gustaría tener este sistema en tu negocio?
-        </div>
+          <div className="mb-3">
+            <small className="text-muted text-uppercase fw-bold" style={{ fontSize: '0.7rem', letterSpacing: '1px' }}>
+              Potenciado por CloudTurn
+            </small>
+          </div>
 
-        <a
-          href={whatsappUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn btn-outline-success btn-sm rounded-pill px-3 fw-bold"
-        >
-          <Whatsapp className="me-2" />
-          Contáctame por WhatsApp
-        </a>
+          <div className="d-inline-block p-3 bg-white rounded shadow-sm border footer-promo">
+            <p className="text-muted small mb-2 fw-500">
+              ¿Quieres un sistema de turnos para tu negocio?
+            </p>
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-success btn-sm rounded-pill px-4 fw-bold d-inline-flex align-items-center gap-2 hover-lift"
+            >
+              <Whatsapp size={16} />
+              Contratar Sistema
+            </a>
+          </div>
 
-        <div className="mt-2 text-muted" style={{ fontSize: '0.75rem' }}>
-          Desarrollado con ❤️ por CloudTeam
-        </div>
+          <div className="mt-4 text-muted opacity-50" style={{ fontSize: '0.75rem' }}>
+            &copy; {new Date().getFullYear()} CloudTurn App. Todos los derechos reservados.
+          </div>
+        </Container>
       </footer>
 
+      {/* Estilos Globales para este layout */}
+      <style>{`
+        .layout-wrapper {
+          background-color: #f8f9fa; /* Fallback */
+          background-image: linear-gradient(to bottom, #f8f9fa, #ffffff);
+          min-height: 100vh;
+          display: flex;
+          flex-direction: column;
+        }
+        .tracking-tight { letter-spacing: -0.5px; }
+        .fw-500 { font-weight: 500; }
+        
+        .hover-lift { transition: transform 0.2s; }
+        .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(25, 135, 84, 0.2); }
+        
+        /* Ajuste para móviles: evitar que el teclado tape inputs si fuera necesario */
+        @media (max-width: 576px) {
+          .layout-wrapper { background-color: #ffffff; }
+        }
+      `}</style>
     </div>
-  )
+  );
 }

@@ -1,81 +1,111 @@
-import React, { useEffect, useState } from 'react';
-import { Button } from 'react-bootstrap';
-import { ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
-
-// Función auxiliar
-const getNextDays = (startDate, daysToAdd) => {
-  const dates = [];
-  for (let i = 0; i < daysToAdd; i++) {
-    const date = new Date(startDate);
-    date.setDate(startDate.getDate() + i);
-    dates.push(date);
-  }
-  return dates;
-};
+import React, { useMemo } from 'react';
+import { Form } from 'react-bootstrap';
+import { CalendarDate } from 'react-bootstrap-icons';
 
 export default function DateSelector({ selectedDate, onDateChange }) {
-  const [currentStart, setCurrentStart] = useState(new Date());
-  const [visibleDates, setVisibleDates] = useState([]);
 
-  // Generar los 5 días visibles
-  useEffect(() => {
-    setVisibleDates(getNextDays(currentStart, 5));
-  }, [currentStart]);
+  const nextDays = useMemo(() => {
+    return Array.from({ length: 5 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
 
-  // Formatear fecha para comparar (YYYY-MM-DD)
-  const formatDateISO = (date) => date.toISOString().split('T')[0];
+      // Formato YYYY-MM-DD para el value
+      const fullDate = d.toISOString().split('T')[0];
 
-  const handlePrev = () => {
-    const newStart = new Date(currentStart);
-    newStart.setDate(currentStart.getDate() - 5);
-    // No ir al pasado
-    if (newStart < new Date()) setCurrentStart(new Date());
-    else setCurrentStart(newStart);
-  };
+      // Formatos visuales
+      const dayName = d.toLocaleDateString('es-AR', { weekday: 'short' }); // "lun", "mar"
+      const dayNum = d.getDate();
 
-  const handleNext = () => {
-    const newStart = new Date(currentStart);
-    newStart.setDate(currentStart.getDate() + 5);
-    setCurrentStart(newStart);
-  };
+      return { full: fullDate, dayName, dayNum };
+    });
+  }, []);
 
   return (
-    <div className="d-flex align-items-center justify-content-between mb-4">
-      <Button variant="light" size="sm" onClick={handlePrev} disabled={currentStart <= new Date()}>
-        <ChevronLeft />
-      </Button>
+    <div className="w-100">
+      {/* 1. TÍTULO OPCIONAL (Contexto visual) */}
+      <div className="d-flex align-items-center mb-2 text-muted small fw-bold text-uppercase">
+        <CalendarDate className="me-2" /> Seleccionar Día
+      </div>
 
-      <div className="d-flex gap-2 overflow-auto px-2" style={{ scrollbarWidth: 'none' }}>
-        {visibleDates.map((date) => {
-          const isSelected = selectedDate === formatDateISO(date);
-          const isToday = formatDateISO(date) === formatDateISO(new Date());
+      {/* 2. CONTENEDOR FLEXIBLE (Scroll horizontal en móviles) */}
+      <div className="d-flex align-items-center gap-2 overflow-auto pb-2 px-1 hide-scrollbar">
 
-          // Formato día semana (Lun, Mar)
-          const dayName = date.toLocaleDateString('es-ES', { weekday: 'short' });
-          // Formato número día (01, 30)
-          const dayNumber = date.getDate();
+        {/* Píldoras de Días Próximos */}
+        {nextDays.map((day) => {
+          const isActive = selectedDate === day.full;
 
           return (
             <div
-              key={date.toString()}
-              onClick={() => onDateChange(formatDateISO(date))}
-              className={`text-center p-2 rounded cursor-pointer border ${isSelected ? 'bg-primary text-white border-primary' : 'bg-white border-light'}`}
-              style={{ minWidth: '60px', cursor: 'pointer', transition: '0.2s' }}
+              key={day.full}
+              onClick={() => onDateChange(day.full)}
+              className={`
+                date-pill d-flex flex-column align-items-center justify-content-center 
+                border rounded px-3 py-2 cursor-pointer transition-all
+                ${isActive ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white text-dark'}
+              `}
+              style={{ minWidth: '70px', height: '65px', cursor: 'pointer' }}
             >
-              <div className={`small text-uppercase fw-bold ${isSelected ? 'text-white' : 'text-muted'}`} style={{ fontSize: '0.7rem' }}>
-                {isToday ? 'HOY' : dayName}
-              </div>
-              <div className="fs-5 fw-bold">
-                {dayNumber}
-              </div>
+              <span className={`small text-uppercase fw-bold ${isActive ? 'opacity-100' : 'opacity-50'}`} style={{ fontSize: '0.75rem', lineHeight: 1 }}>
+                {day.dayName}
+              </span>
+              <span className="fs-4 fw-bold" style={{ lineHeight: 1.2 }}>
+                {day.dayNum}
+              </span>
             </div>
           );
         })}
+
+        {/* Separador visual */}
+        <div className="border-end mx-1" style={{ height: '40px' }}></div>
+
+        {/* 3. INPUT NATIVO (Para fechas lejanas) */}
+        <div className="position-relative">
+          <Form.Control
+            type="date"
+            required
+            value={selectedDate || ''}
+            min={new Date().toISOString().split('T')[0]} // No permitir pasado
+            onChange={(e) => onDateChange(e.target.value)}
+            className="shadow-sm border-0 bg-light text-primary fw-bold"
+            style={{
+              height: '65px',
+              cursor: 'pointer',
+              minWidth: 'auto'
+            }}
+          />
+          {/* Label flotante para UX */}
+          {!selectedDate && (
+            <div
+              className="position-absolute top-50 start-50 translate-middle text-muted small pe-none"
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Otra fecha
+            </div>
+          )}
+        </div>
       </div>
 
-      <Button variant="light" size="sm" onClick={handleNext}>
-        <ChevronRight />
-      </Button>
+      {/* Estilos CSS Inline */}
+      <style>{`
+        .date-pill:hover {
+          transform: translateY(-2px);
+          background-color: #f8f9fa;
+        }
+        .date-pill.bg-primary:hover {
+          background-color: #0b5ed7 !important; /* Darker blue */
+          color: white !important;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+          height: 4px;
+        }
+        .hide-scrollbar::-webkit-scrollbar-thumb {
+          background: #dee2e6;
+          border-radius: 4px;
+        }
+        .transition-all {
+          transition: all 0.2s ease-in-out;
+        }
+      `}</style>
     </div>
   );
 }
