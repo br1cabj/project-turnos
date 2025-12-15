@@ -280,6 +280,18 @@ export const getClinicalNotes = async (tenantId, clientId) => {
   });
 };
 
+export const updateClinicalNote = async (noteId, newText) => {
+  const noteRef = doc(db, 'clinicalNotes', noteId);
+  await updateDoc(noteRef, {
+    text: newText,
+    updatedAt: new Date(),
+  });
+};
+
+export const deleteClinicalNote = async (noteId) => {
+  await deleteDoc(doc(db, 'clinicalNotes', noteId));
+};
+
 export const createRecurringAppointments = async (
   baseAppointment,
   weeksToRepeat

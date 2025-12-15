@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Tabs, Tab, Table, Form, Card, Badge } from 'react-bootstrap';
-import { FileText, ClockHistory, Plus } from 'react-bootstrap-icons';
-import { getClientHistory, getClinicalNotes, addClinicalNote } from '../services/dbService';
+import { FileText, ClockHistory, Plus, PencilSquare, Trash, CheckLg, XLg } from 'react-bootstrap-icons';
+import { getClientHistory, getClinicalNotes, addClinicalNote, updateClinicalNote, deleteClinicalNote } from '../services/dbService';
 import { useSector } from '../hooks/useSector';
 import Swal from 'sweetalert2';
 
@@ -37,6 +37,9 @@ export default function ClientDetailsModal({ show, handleClose, client, tenant }
   const [newNote, setNewNote] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [editingId, setEditingId] = useState(null)
+  const [editText, setEditText] = useState('')
+
   const sector = useSector(tenant);
 
   useEffect(() => {
@@ -66,7 +69,7 @@ export default function ClientDetailsModal({ show, handleClose, client, tenant }
     }
   }, [client, show, tenant, sector]);
 
-  // 2. AGREGAR NOTA
+  // --- HANDLE ---
   const handleAddNote = async (e) => {
     e.preventDefault();
     if (!newNote.trim()) return;
@@ -84,6 +87,66 @@ export default function ClientDetailsModal({ show, handleClose, client, tenant }
     } catch (error) {
       console.error(error);
       Swal.fire('Error', 'No se pudo guardar la nota', 'error');
+    }
+  };
+
+
+  const handleDeleteNote = async (noteId) => {
+    const result = await Swal.fire({
+      title: '¿Eliminar nota?',
+      text: "No podrás revertir esta acción",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (result.isConfirmed) {
+      try {
+        await deleteClinicalNote(noteId)
+        setNotes(prev => prev.filter(n => n.id !== noteId))
+
+        Swal.fire('Eliminado', 'La nota ha sido eliminada.', 'success');
+      } catch (error) {
+        console.error(error);
+        Swal.fire('Error', 'No se pudo eliminar la nota', 'error');
+      }
+    }
+  }
+
+  // --- INICIAR EDICIÓN ---
+  const startEditing = (note) => {
+    setEditingId(note.id);
+    setEditText(note.text);
+  };
+
+  // --- CANCELAR EDICIÓN ---
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditText("");
+  };
+
+  // --- GUARDAR EDICIÓN ---
+  const saveEdit = async (noteId) => {
+    if (!editText.trim()) return;
+
+    try {
+      await updateClinicalNote(noteId, editText);
+
+      setNotes(prev => prev.map(n =>
+        n.id === noteId ? { ...n, text: editText } : n
+      ));
+
+      setEditingId(null);
+
+      const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
+      Toast.fire({ icon: 'success', title: 'Nota actualizada' });
+
+    } catch (error) {
+      console.error(error);
+      Swal.fire('Error', 'No se pudo actualizar', 'error');
     }
   };
 
@@ -158,26 +221,77 @@ export default function ClientDetailsModal({ show, handleClose, client, tenant }
               </div>
 
               {/* Lista de Notas */}
-              <div className="timeline" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              <div className="timeline" style={{ maxHeight: '400px', overflowY: 'auto', minHeight: '100px' }}>
                 {notes.map(note => (
                   <Card key={note.id} className="mb-2 border-0 shadow-sm animate__animated animate__fadeIn">
                     <Card.Body className="p-3">
-                      <div className="d-flex justify-content-between text-muted small mb-2 border-bottom pb-1">
-                        {/* Usamos el helper parseDate para evitar errores con Timestamps */}
-                        <span className="fw-bold text-primary">
-                          {formatDateTime(parseDate(note.createdAt))}
-                        </span>
-                        <span>{note.createdBy || 'Usuario'}</span>
+
+                      {/* HEADER DE LA NOTA (Fecha y Botones) */}
+                      <div className="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                        <div className="d-flex flex-column">
+                          <span className="fw-bold text-primary small">
+                            {formatDateTime(parseDate(note.createdAt))}
+                          </span>
+                          <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                            {note.createdBy || 'Sistema'}
+                          </span>
+                        </div>
+
+                        {/* BOTONES DE ACCIÓN */}
+                        {editingId !== note.id && (
+                          <div>
+                            <Button
+                              variant="link"
+                              className="text-secondary p-0 me-2"
+                              title="Editar"
+                              onClick={() => startEditing(note)}
+                            >
+                              <PencilSquare size={16} />
+                            </Button>
+                            <Button
+                              variant="link"
+                              className="text-danger p-0"
+                              title="Eliminar"
+                              onClick={() => handleDeleteNote(note.id)}
+                            >
+                              <Trash size={16} />
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                      <p className="mb-0 text-dark" style={{ whiteSpace: 'pre-wrap' }}>{note.text}</p>
+                      {/* CUERPO DE LA NOTA */}
+                      {editingId === note.id ? (
+                        <div className="animate__animated animate__fadeIn">
+                          <Form.Control
+                            as="textarea"
+                            rows={3}
+                            value={editText}
+                            onChange={(e) => setEditText(e.target.value)}
+                            className="mb-2"
+                            autoFocus
+                          />
+                          <div className="d-flex justify-content-end gap-2">
+                            <Button size="sm" variant="secondary" onClick={cancelEditing}>
+                              <XLg /> Cancelar
+                            </Button>
+                            <Button size="sm" variant="success" onClick={() => saveEdit(note.id)}>
+                              <CheckLg /> Guardar
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mb-0 text-dark" style={{ whiteSpace: 'pre-wrap' }}>
+                          {note.text}
+                        </p>
+                      )}
+
                     </Card.Body>
                   </Card>
                 ))}
 
                 {notes.length === 0 && !loading && (
-                  <p className="text-center text-muted py-3">No hay notas clínicas aún.</p>
+                  <div className="text-center text-muted py-3">No hay notas clínicas aún.</div>
                 )}
-                {loading && <p className="text-center text-muted">Cargando...</p>}
               </div>
             </Tab>
           )}
