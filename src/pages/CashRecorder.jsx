@@ -9,10 +9,11 @@ import {
   DashCircle,
   Trash,
   Funnel,
-  CalendarCheck
+  CalendarCheck,
+  FileEarmarkSpreadsheet
 } from 'react-bootstrap-icons';
 import { useAuth } from '../contexts/AuthContext';
-import { getMyBusiness, getCollection, saveDocument, deleteDocument } from '../services/dbService';
+import { getMyBusiness, getCollection, saveDocument, deleteDocument, exportToCSV } from '../services/dbService';
 import Swal from 'sweetalert2';
 
 // --- HELPERS ---
@@ -87,7 +88,7 @@ export default function CashRegister() {
     init();
   }, [currentUser]);
 
-  // --- 2. CÁLCULOS (Memoizados) ---
+  // --- 2. CÁLCULOS ---
   const filteredMovements = useMemo(() => {
     if (!selectedMonth) return allMovements;
     return allMovements.filter(m => m.date && m.date.startsWith(selectedMonth));
@@ -103,8 +104,28 @@ export default function CashRegister() {
     return { income: inc, expense: exp, total: inc - exp };
   }, [filteredMovements]);
 
-
   // --- 3. HANDLERS ---
+  const handleExport = () => {
+    if (filteredMovements.length === 0) {
+      Swal.fire('Atención', 'No hay datos para exportar en este mes.', 'info');
+      return;
+    }
+
+    const dataToExport = filteredMovements.map(m => ({
+      Fecha: formatDate(m.date),
+      Descripción: m.description,
+      Tipo: m.type === 'income' ? 'INGRESO' : 'GASTO',
+      Monto: m.amount,
+      Origen: m.appointmentId ? 'Turno / Cita' : 'Carga Manual',
+      Creado_Por: m.createdBy || 'Sistema'
+    }));
+
+    exportToCSV(dataToExport, `Reporte_Caja_${selectedMonth}`)
+    const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+    Toast.fire({ icon: 'success', title: 'Archivo descargado' });
+
+  }
+
   const handleOpenModal = (type) => {
     setModalType(type);
     setFormData({
@@ -212,6 +233,16 @@ export default function CashRegister() {
               style={{ width: '130px', fontSize: '0.9rem' }}
             />
           </div>
+
+          <Button
+            variant="outline-success"
+            size="sm"
+            className="d-flex align-items-center gap-1 me-2"
+            onClick={handleExport}
+            title="Exportar a Excel/CSV"
+          >
+            <FileEarmarkSpreadsheet /> <span className="d-none d-lg-inline">Exportar</span>
+          </Button>
 
           <Button variant="outline-danger" size="sm" className="d-flex align-items-center gap-1" onClick={() => handleOpenModal("expense")}>
             <DashCircle /> <span className="d-none d-sm-inline">Gasto</span>
